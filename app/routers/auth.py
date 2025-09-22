@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from app.models import UserCredentials
+from app.auth_utils import create_access_token
 import sqlite3
 import bcrypt
 
@@ -30,9 +31,11 @@ async def login_for_access_token(credentials: UserCredentials):
     if not bcrypt.checkpw(password_bytes, stored_hashed_password):
         raise HTTPException(status_code=401, detail="Неверное имя пользователя или пароль")
     
-    # Успешная авторизация
-    return {
-        "status": "success",
-        "token": "fake-jwt-token-from-db", # Токен будет генерироваться позже
-        "user_full_name": user_record["full_name"]
-    }
+     # --- ГЕНЕРАЦИЯ JWT-ТОКЕНА ---
+    # Создаем токен, содержащий имя пользователя
+    access_token = create_access_token(
+        data={"sub": user_record["username"]}
+    )
+    
+    # Возвращаем токен вместо заглушки
+    return {"access_token": access_token, "token_type": "bearer"}

@@ -2,3 +2,5 @@ fastapi
 uvicorn[standard]
 pydantic
 bcrypt
+python-jose[cryptography]
+python-dotenv
