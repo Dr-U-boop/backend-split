@@ -4,3 +4,4 @@ pydantic
 bcrypt
 python-jose[cryptography]
 python-dotenv
+cryptography
