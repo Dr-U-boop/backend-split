@@ -68,6 +68,24 @@ else:
     WHERE username = ?
     """, ("Иван Петрович Сидоров", "Терапевт", "doctor"))
 
+# ... (внутри файла database_setup.py)
+
+# --- Создаем таблицу для временных рядов ---
+cur.execute("""
+CREATE TABLE IF NOT EXISTS timeseries_data (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER,
+    timestamp TIMESTAMP NOT NULL,
+    record_type TEXT NOT NULL,
+    value REAL NOT NULL,
+    encrypted_details TEXT,
+    FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
+)
+""")
+
+# ... (в конце файла)
+print(f"Таблица 'timeseries_data' успешно создана/проверена.")
+
 
 con.commit()
 con.close()

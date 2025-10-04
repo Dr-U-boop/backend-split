@@ -26,3 +26,16 @@ class MedicalRecordDisplay(MedicalRecordCreate):
 class UserCredentials(BaseModel):
     username: str
     password: str
+
+class PatientFullData(PatientDisplay):
+        records: List[MedicalRecordDisplay] = []
+
+class TimeSeriesDataPoint(BaseModel):
+     timestamp: datetime
+     record_type: str
+     value: float
+     details: Optional[str] = None
+
+class TimeSeriesDataIngest(BaseModel):
+     patient_id: int
+     data_points: List[TimeSeriesDataPoint]

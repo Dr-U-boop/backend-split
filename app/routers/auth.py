@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from app.models import UserCredentials
-from app.auth_utils import create_access_token
+from app.auth_utils import create_access_token, get_current_doctor
 import sqlite3
 import bcrypt
 
@@ -39,3 +39,15 @@ async def login_for_access_token(credentials: UserCredentials):
     
     # Возвращаем токен вместо заглушки
     return {"access_token": access_token, "token_type": "bearer"}
+
+@router.get("/me")
+def read_users_me(current_doctor: dict = Depends(get_current_doctor)):
+    """
+    Возрващает информацию о текущем авторизованном враче.
+    Используется для проверки валидности токена.
+    """
+    return {
+        "username": current_doctor["username"],
+        "full_name": current_doctor["full_name"],
+        "specialization": current_doctor["specialization"]
+    }
