@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
+from typing import List, Optional
 import sqlite3
 from app.models import PatientCreate, PatientDisplay, MedicalRecordCreate
 from app.auth_utils import get_current_doctor
 from app.encryption_utils import encrypt_data, decrypt_data
-from datetime import datetime, timedelta
+from app.analysis_utils import analyze_patient_data
+from datetime import datetime, timedelta, time
 
 router = APIRouter()
 DB_NAME = "medical_app.db"
@@ -124,34 +125,140 @@ def get_patient_details(patient_id: int, current_doctor: dict = Depends(get_curr
     return patient_details
 
 @router.get("/{patient_id}/glucose_data")
-def get_patient_glucose_data(patient_id: int, current_doctor: dict = Depends(get_current_doctor)):
+def get_patient_glucose_data(
+    patient_id: int, 
+    current_doctor: dict = Depends(get_current_doctor),
+    start_datetime: Optional[datetime] = None, # <--- Принимаем полную дату и время
+    end_datetime: Optional[datetime] = None
+):
     """
-    Возвращает данные об уровне глюкозы пациента за последние 7 дней,
-    отформатированные для Chart.js.
+    Возвращает данные о глюкозе. По умолчанию за последние 7 дней.
+    Если даты и время указаны, фильтрует по ним.
     """
-    # Проверка, что врач имеет доступ к этому пациенту
+    # ... (проверка доступа врача остается без изменений) ...
     con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
     cur = con.cursor()
     cur.execute("SELECT id FROM patients WHERE id = ? AND doctor_id = ?", (patient_id, current_doctor["id"]))
     if cur.fetchone() is None:
         con.close()
-        raise HTTPException(status_code=status.HTTP_4_4_NOT_FOUND, detail="Пациент не найден")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
 
-    # Запрашиваем данные за последние 7 дней
-    seven_days_ago = datetime.now() - timedelta(days=7)
-    cur.execute(
+    if start_datetime and end_datetime:
+        query = """
+            SELECT timestamp, value FROM timeseries_data 
+            WHERE patient_id = ? AND record_type = 'glucose' AND timestamp BETWEEN ? AND ?
+            ORDER BY timestamp ASC
         """
-        SELECT timestamp, value FROM timeseries_data 
-        WHERE patient_id = ? AND record_type = 'glucose' AND timestamp >= ?
-        ORDER BY timestamp ASC
-        """,
-        (patient_id, seven_days_ago)
-    )
+        params = (patient_id, start_datetime, end_datetime)
+    else:
+        # --- ЛОГИКА ПО УМОЛЧАНИЮ (ПОСЛЕДНИЕ 7 ДНЕЙ) ---
+        seven_days_ago = datetime.utcnow() - timedelta(days=7)
+        query = """
+            SELECT timestamp, value FROM timeseries_data 
+            WHERE patient_id = ? AND record_type = 'glucose' AND timestamp >= ?
+            ORDER BY timestamp ASC
+        """
+        params = (patient_id, seven_days_ago)
+        
+    cur.execute(query, params)
     glucose_records = cur.fetchall()
     con.close()
 
-    # Форматируем данные для Chart.js
-    labels = [datetime.fromisoformat(rec[0]).strftime('%d.%m %H:%M') for rec in glucose_records]
-    data = [rec[1] for rec in glucose_records]
+    labels = [datetime.fromisoformat(rec["timestamp"]).strftime('%d.%m %H:%M') for rec in glucose_records]
+    data = [rec["value"] for rec in glucose_records]
 
     return {"labels": labels, "data": data}
+
+ # backend/app/routers/patients.py
+# ...
+
+@router.get("/{patient_id}/comprehensive_data")
+def get_patient_comprehensive_data(
+    patient_id: int, 
+    current_doctor: dict = Depends(get_current_doctor),
+    start_datetime: Optional[datetime] = None,
+    end_datetime: Optional[datetime] = None
+):
+    """
+    Возвращает полный набор данных (глюкоза, инсулин, углеводы) за период.
+    """
+    # ... (проверка доступа врача остается без изменений) ...
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+    # Проверяем, существует ли пациент и принадлежит ли он этому врачу
+    cur.execute("SELECT * FROM patients WHERE id = ? AND doctor_id = ?", (patient_id, current_doctor["id"]))
+    patient_record = cur.fetchone()
+
+    if not patient_record:
+        con.close()
+        raise HTTPException(status_code=status.HTTP_4_NOT_FOUND, detail="Пациент не найден")
+    
+    if not (start_datetime and end_datetime):
+        end_datetime = datetime.utcnow()
+        start_datetime = end_datetime - timedelta(days=7)
+
+    cur.execute(
+        """
+        SELECT timestamp, record_type, value FROM timeseries_data 
+        WHERE patient_id = ? AND timestamp BETWEEN ? AND ?
+        ORDER BY timestamp ASC
+        """,
+        (patient_id, start_datetime, end_datetime)
+    )
+    records = cur.fetchall()
+    con.close()
+
+    # Форматируем данные в удобную для Chart.js структуру
+    response_data = {
+        "glucose": [],
+        "insulin": [],
+        "carbs": []
+    }
+    for rec in records:
+        point = {"x": rec["timestamp"], "y": rec["value"]}
+        if rec["record_type"] == 'glucose':
+            response_data["glucose"].append(point)
+        elif 'insulin' in rec["record_type"]:
+            response_data["insulin"].append(point)
+        elif rec["record_type"] == 'carbs':
+            response_data["carbs"].append(point)
+
+    return response_data
+
+@router.get("/{patient_id}/recommendations")
+def get_patient_recommendations(patient_id: int, current_doctor: dict = Depends(get_current_doctor)):
+    """
+    Анализирует данные пациента за последние 30 дней и возвращает рекомендации.
+    """
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+
+    # Проверяем, принадлежит ли пациент врачу
+    cur.execute("SELECT id FROM patients WHERE id = ? AND doctor_id = ?", (patient_id, current_doctor["id"]))
+    if cur.fetchone() is None:
+        con.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
+
+    # Загружаем ВСЕ данные за месяц
+    month_ago = datetime.utcnow() - timedelta(days=30)
+    cur.execute(
+        "SELECT timestamp, record_type, value FROM timeseries_data WHERE patient_id = ? AND timestamp >= ?",
+        (patient_id, month_ago)
+    )
+
+    # Преобразуем строки в словари
+    records = [
+        {
+            "timestamp": datetime.fromisoformat(rec["timestamp"]),
+            "record_type": rec["record_type"],
+            "value": rec["value"]
+        }
+        for rec in cur.fetchall()
+    ]
+
+    con.close()
+    recommendations = analyze_patient_data(records)
+    return {"recommendations": recommendations}
