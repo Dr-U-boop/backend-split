@@ -6,3 +6,4 @@ python-jose[cryptography]
 python-dotenv
 cryptography
 faker
+spacy
