@@ -39,3 +39,7 @@ class TimeSeriesDataPoint(BaseModel):
 class TimeSeriesDataIngest(BaseModel):
      patient_id: int
      data_points: List[TimeSeriesDataPoint]
+
+class PatientParameters(BaseModel):
+    patient_id: int
+    encrypted_parameters: str

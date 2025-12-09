@@ -3,10 +3,90 @@ import random
 from faker import Faker
 from datetime import datetime, timedelta
 from app.encryption_utils import encrypt_data
+import json
 
 DB_NAME = "medical_app.db"
 NUM_PATIENTS = 5
 DAYS_OF_DATA = 30
+
+DEFAULT_PARAMETERS = {
+    "mt": 79.7963,
+    "Vi": 0.05,
+    "ki1": 0.19,
+    "ki2": 0.27,
+    "ki3": 0.3484,
+    "kgabs": 0.057,
+    "kgri": 0.056,
+    "kmin": 0.008,
+    "kmax": 0.056,
+    "k1gg": 0.065,
+    "k2gg": 0.079,
+    "ucns": 0.35,
+    "vidb": 1.0,
+    "kres": 0.0731,
+    "k1e": 0.05,
+    "k2e": 188.333,
+    "k1abs": 0.0297,
+    "k2abs": 0.0113,
+    "ks": 0.2,
+    "kd": 1.0,
+    "ksen": 1.0,
+    "lbh": 5.0,
+    "gth": 199.08,
+    "kh1": 0.001,
+    "kh2": 0.001,
+    "kh3": 0.001,
+    "kh4": 0.001,
+    "k1gl": 0.02,
+    "k2gl": 0.1,
+    "kh5": 0.001,
+    "kh6": 0.001,
+    "k1gng": 0.0084,
+    "k2gng": 0.0048,
+    "kKc": 0.0035,
+    "ib": 104.08,
+    "gb": 199.08,
+    "g0": 210.24,
+    "Il0": 2.61,
+    "Ip0": 5.2045,
+    "fgut0": 0.0,
+    "fliq0": 0.0,
+    "fsol0": 0.0,
+    "gt0": 210.0,
+    "Xt0": 0.0,
+    "Ii0": 4120.5,
+    "It0": 10830.0,
+    "Hp0": 50.2757,
+    "SRsh0": 5.0276,
+    "gl0": 210.0,
+    "Phn10": 0.4932,
+    "Pha10": 9.5018,
+    "Phn20": 5.7039,
+    "Pha20": 0.2961,
+    "yg0": 20000.0,
+    "PCa0": 0.9887,
+    "PCn0": 0.0513,
+    "pyr0": 0.0,
+    "Er0": 10.0,
+    "Er10": 10.0,
+    "kret": 0.13,
+    "kdec": 0.68,
+    "delth_g": 0.9,
+    "vid": 0.087,
+    "Kidb": 205.59,
+    "vgg": 0.5,
+    "vgl": 0.25,
+    "Kgl": 75,
+    "Kgn": 432,
+    "Ki": 2.5,
+    "vgng": 2,
+    "Kgng": 0.5,
+    "k1i": 0.19,
+    "k2i": 0.27,
+    "k3i": 0.3484,
+    "di": 0.12,
+    "dh": 0.1
+}
 
 fake = Faker('ru_RU')
 
@@ -57,6 +137,14 @@ def seed_data():
         )
         patient_id = cur.lastrowid
         print(f"  Создан пациент: {full_name} (ID: {patient_id})")
+
+        # Добавляем параметры для симуляции
+        params_json = json.dumps(DEFAULT_PARAMETERS)
+        encrypted_params = encrypt_data(params_json)
+        cur.execute(
+            "INSERT INTO patients_parameters (patient_id, encrypted_parameters) VALUES (?, ?)",
+            (patient_id, encrypted_params)
+        )
 
         all_timeseries_data = []
         start_date = datetime.now() - timedelta(days=DAYS_OF_DATA)

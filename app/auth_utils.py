@@ -26,7 +26,6 @@ if SECRET_KEY is None:
     raise ValueError("Необходимо установить переменную окружения SECRET_KEY в .env файле")
 
 def create_access_token(data: dict):
-    # ... (остальной код функции остается без изменений) ...
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})

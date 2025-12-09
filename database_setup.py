@@ -83,6 +83,16 @@ CREATE TABLE IF NOT EXISTS timeseries_data (
 )
 """)
 
+# --- Создаем таблицу для параметров пациентов ---
+cur.execute("""
+CREATE TABLE IF NOT EXISTS patients_parameters (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER,
+    encrypted_parameters TEXT NOT NULL,
+    FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
+)
+""")
+
 # ... (в конце файла)
 print(f"Таблица 'timeseries_data' успешно создана/проверена.")
 
