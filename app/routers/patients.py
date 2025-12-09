@@ -262,3 +262,35 @@ def get_patient_recommendations(patient_id: int, current_doctor: dict = Depends(
     con.close()
     recommendations = analyze_patient_data(records)
     return {"recommendations": recommendations}
+    con.close()
+    recommendations = analyze_patient_data(records)
+    return {"recommendations": recommendations}
+
+@router.get("/{patient_id}/parameters")
+def get_patient_parameters(patient_id: int, current_doctor: dict = Depends(get_current_doctor)):
+    """
+    Возвращает расшифрованные параметры симуляции пациента.
+    """
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+
+    # Проверка доступа
+    cur.execute("SELECT id FROM patients WHERE id = ? AND doctor_id = ?", (patient_id, current_doctor["id"]))
+    if cur.fetchone() is None:
+        con.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
+
+    cur.execute("SELECT encrypted_parameters FROM patients_parameters WHERE patient_id = ?", (patient_id,))
+    record = cur.fetchone()
+    con.close()
+
+    if not record:
+        return {} # Или ошибка, если параметры обязательны
+
+    try:
+        decrypted_json_str = decrypt_data(record["encrypted_parameters"])
+        import json
+        return json.loads(decrypted_json_str)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ошибка дешифровки параметров: {str(e)}")
