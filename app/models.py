@@ -43,3 +43,8 @@ class TimeSeriesDataIngest(BaseModel):
 class PatientParameters(BaseModel):
     patient_id: int
     encrypted_parameters: str
+
+class SimulatorScenario(BaseModel):
+    scenario_id: int
+    patient_id: int
+    scenario_data: dict

@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional
 import sqlite3
-from app.models import PatientCreate, PatientDisplay, MedicalRecordCreate
+from typing import List, Optional
+import sqlite3
+import json
+from app.models import PatientCreate, PatientDisplay, MedicalRecordCreate, SimulatorScenario
 from app.auth_utils import get_current_doctor
 from app.encryption_utils import encrypt_data, decrypt_data
 from app.analysis_utils import analyze_patient_data
@@ -294,3 +297,39 @@ def get_patient_parameters(patient_id: int, current_doctor: dict = Depends(get_c
         return json.loads(decrypted_json_str)
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ошибка дешифровки параметров: {str(e)}")
+
+@router.get("/{patient_id}/scenarios", response_model=List[SimulatorScenario])
+def get_simulator_scenarios(patient_id: int, current_doctor: dict = Depends(get_current_doctor)):
+    """
+    Возвращает список сценариев симуляции для конкретного пациента.
+    """
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+
+    # Проверка доступа
+    cur.execute("SELECT id FROM patients WHERE id = ? AND doctor_id = ?", (patient_id, current_doctor["id"]))
+    if cur.fetchone() is None:
+        con.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
+
+    cur.execute("SELECT id, patient_id, encrypted_scenario FROM simulator_scenarios WHERE patient_id = ?", (patient_id,))
+    records = cur.fetchall()
+    con.close()
+
+    scenarios = []
+    for rec in records:
+        try:
+            decrypted_str = decrypt_data(rec["encrypted_scenario"])
+            scenario_json = json.loads(decrypted_str)
+            scenarios.append(SimulatorScenario(
+                scenario_id=rec["id"],
+                patient_id=rec["patient_id"],
+                scenario_data=scenario_json
+            ))
+        except Exception:
+             # В случае ошибки дешифровки или парсинга можно вернуть заглушку или пропустить
+             # Для отладки оставим как есть, возможно стоит логировать
+             continue
+    
+    return scenarios

@@ -83,6 +83,17 @@ CREATE TABLE IF NOT EXISTS timeseries_data (
 )
 """)
 
+# --- Создаем таблицу для сценариев симулятора ---
+cur.execute("""
+CREATE TABLE IF NOT EXISTS simulator_scenarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id INTEGER,
+    encrypted_scenario TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients (id) ON DELETE CASCADE
+)
+""")
+
 # --- Создаем таблицу для параметров пациентов ---
 cur.execute("""
 CREATE TABLE IF NOT EXISTS patients_parameters (

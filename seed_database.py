@@ -88,6 +88,25 @@ DEFAULT_PARAMETERS = {
     "dh": 0.1
 }
 
+DEFAULT_SCENARIO = {
+    "M": 90.0,
+    "tm": 60.0,
+    "Tm": 20.0,
+    "kbol": 1.4,
+    "kw": 0.4,
+    "t0": 0,
+    "t1": 720,
+    "ti_1": 30.0,
+    "ti_2": 60.0,
+    "Ti_1": 10.0,
+    "Ti_2": 10.0,
+    "OB": 0.05263157894736842,
+    "Di": 6.63157894736842,
+    "Dbol_1": 2.6526315789473682,
+    "Dbol_2": 3.978947368421052,
+    "Vbas": 1.2237
+}
+
 fake = Faker('ru_RU')
 
 def simulate_day_data(start_time):
@@ -140,10 +159,16 @@ def seed_data():
 
         # Добавляем параметры для симуляции
         params_json = json.dumps(DEFAULT_PARAMETERS)
+        sim_json = json.dumps(DEFAULT_SCENARIO)
         encrypted_params = encrypt_data(params_json)
+        encrypted_sim = encrypt_data(sim_json)
         cur.execute(
             "INSERT INTO patients_parameters (patient_id, encrypted_parameters) VALUES (?, ?)",
             (patient_id, encrypted_params)
+        )
+        cur.execute(
+            "INSERT INTO simulator_scenarios (patient_id, encrypted_scenario) VALUES (?, ?)",
+            (patient_id, encrypted_sim)
         )
 
         all_timeseries_data = []
