@@ -4,6 +4,10 @@ from faker import Faker
 from datetime import datetime, timedelta
 from app.encryption_utils import encrypt_data
 import json
+import scipy.io
+import numpy as np
+import os
+import itertools
 
 DB_NAME = "medical_app.db"
 NUM_PATIENTS = 5
@@ -109,31 +113,33 @@ DEFAULT_SCENARIO = {
 
 fake = Faker('ru_RU')
 
-def simulate_day_data(start_time):
+def simulate_day_data(start_time, glucose_iterator):
     records = []
     current_time = start_time
-    glucose_level = random.uniform(5.0, 8.0)
+    # glucose_level is now determined by the iterator, but we keep the variable if needed for logic
+    # although we will overwrite it immediately in the loop
 
     for minute_interval in range(24 * 12): # 288 points per day (every 5 mins)
         current_time += timedelta(minutes=5)
         
-        # Meal simulation
+        # Get next glucose value from the iterator
+        glucose_val = next(glucose_iterator)
+
+        # Meal simulation (Still record events, but don't affect glucose)
         if current_time.hour in [8, 13, 19] and current_time.minute == 0:
             carbs = random.randint(30, 80)
             records.append((current_time, 'carbs', carbs, encrypt_data(f"Прием пищи, {carbs} г угл.")))
-            glucose_level += (carbs / 15) # Simplified glucose rise
+            # glucose_level += (carbs / 15) # Disabled: using real data
             
             insulin_dose = round(carbs / 10, 1) # Simplified insulin dose
             records.append((current_time, 'insulin_bolus', insulin_dose, encrypt_data("Быстрый инсулин на еду")))
-            glucose_level -= (insulin_dose * 1.5) # Simplified insulin effect
+            # glucose_level -= (insulin_dose * 1.5) # Disabled: using real data
         
-        # Natural fluctuations
-        glucose_level += random.uniform(-0.2, 0.1)
-        glucose_level = max(3.0, min(18.0, glucose_level)) # Keep within a realistic range
+        # Natural fluctuations - Disabled: using real data
+        # glucose_level += random.uniform(-0.2, 0.1)
+        # glucose_level = max(3.0, min(18.0, glucose_level)) # Keep within a realistic range
 
-        records.append((current_time, 'glucose', round(glucose_level, 1), None))
-        #records.append((current_time, 'carbs', carbs, encrypt_data(f"Прием пищи, {carbs} г угл.")))
-        #records.append((current_time, 'insulin_bolus', insulin_dose, encrypt_data("Быстрый инсулин на еду")))
+        records.append((current_time, 'glucose', round(float(glucose_val), 1), None))
         
     return records
 
@@ -144,6 +150,19 @@ def seed_data():
     
     cur.execute("SELECT id FROM doctors WHERE username = 'doctor'")
     doctor_id = cur.fetchone()[0]
+
+    # Load Multibolus.mat data
+    mat_file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Multibolus.mat')
+    try:
+        mat_data = scipy.io.loadmat(mat_file_path)
+        x_data = mat_data['x'].flatten()
+        print(f"Loaded 'x' data from {mat_file_path}, shape: {x_data.shape}")
+    except Exception as e:
+        print(f"Error loading {mat_file_path}: {e}")
+        return
+
+    # Create an endless iterator for glucose data
+    glucose_iterator = itertools.cycle(x_data)
 
     for i in range(NUM_PATIENTS):
         full_name = fake.name()
@@ -175,7 +194,9 @@ def seed_data():
         start_date = datetime.now() - timedelta(days=DAYS_OF_DATA)
         for day in range(DAYS_OF_DATA):
             daily_records = simulate_day_data(
-            datetime.combine((start_date + timedelta(days=day)).date(), datetime.min.time()))
+                datetime.combine((start_date + timedelta(days=day)).date(), datetime.min.time()),
+                glucose_iterator
+            )
             for record in daily_records:
                 all_timeseries_data.append((patient_id, *record))
 

@@ -7,3 +7,6 @@ python-dotenv
 cryptography
 faker
 spacy
+scipy
+numpy
+airllm
