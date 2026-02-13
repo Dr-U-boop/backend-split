@@ -116,11 +116,13 @@ fake = Faker('ru_RU')
 def simulate_day_data(start_time, glucose_iterator):
     records = []
     current_time = start_time
+    interval_minutes = 30
+    points_per_day = (24 * 60) // interval_minutes
     # glucose_level is now determined by the iterator, but we keep the variable if needed for logic
     # although we will overwrite it immediately in the loop
 
-    for minute_interval in range(24 * 12): # 288 points per day (every 5 mins)
-        current_time += timedelta(minutes=5)
+    for minute_interval in range(points_per_day): # 48 points per day (every 30 mins)
+        current_time += timedelta(minutes=interval_minutes)
         
         # Get next glucose value from the iterator
         glucose_val = next(glucose_iterator)
@@ -161,8 +163,12 @@ def seed_data():
         print(f"Error loading {mat_file_path}: {e}")
         return
 
-    # Create an endless iterator for glucose data
-    glucose_iterator = itertools.cycle(x_data)
+    # Build a daily profile with 48 points distributed across full x_data
+    points_per_day = (24 * 60) // 30
+    sampled_indices = np.linspace(0, len(x_data) - 1, points_per_day, dtype=int)
+    daily_glucose_profile = x_data[sampled_indices]
+    # Create an endless iterator for glucose data (repeats full daily profile)
+    glucose_iterator = itertools.cycle(daily_glucose_profile)
 
     for i in range(NUM_PATIENTS):
         full_name = fake.name()
