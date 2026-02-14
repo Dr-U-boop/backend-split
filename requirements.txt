@@ -9,4 +9,3 @@ faker
 spacy
 scipy
 numpy
-airllm

@@ -14,3 +14,8 @@ app.include_router(recommendations.router, prefix="/api/recommendations", tags=[
 @app.get("/")
 def read_root():
     return {"message": "Auth Backend is running"}
+
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
