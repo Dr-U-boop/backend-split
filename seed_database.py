@@ -113,108 +113,125 @@ DEFAULT_SCENARIO = {
 
 fake = Faker('ru_RU')
 
+
 def simulate_day_data(start_time, glucose_iterator):
     records = []
     current_time = start_time
     interval_minutes = 30
     points_per_day = (24 * 60) // interval_minutes
-    # glucose_level is now determined by the iterator, but we keep the variable if needed for logic
-    # although we will overwrite it immediately in the loop
 
-    for minute_interval in range(points_per_day): # 48 points per day (every 30 mins)
+    for _ in range(points_per_day):
         current_time += timedelta(minutes=interval_minutes)
-        
-        # Get next glucose value from the iterator
         glucose_val = next(glucose_iterator)
 
-        # Meal simulation (Still record events, but don't affect glucose)
         if current_time.hour in [8, 13, 19] and current_time.minute == 0:
             carbs = random.randint(30, 80)
-            records.append((current_time, 'carbs', carbs, encrypt_data(f"Прием пищи, {carbs} г угл.")))
-            # glucose_level += (carbs / 15) # Disabled: using real data
-            
-            insulin_dose = round(carbs / 10, 1) # Simplified insulin dose
-            records.append((current_time, 'insulin_bolus', insulin_dose, encrypt_data("Быстрый инсулин на еду")))
-            # glucose_level -= (insulin_dose * 1.5) # Disabled: using real data
-        
-        # Natural fluctuations - Disabled: using real data
-        # glucose_level += random.uniform(-0.2, 0.1)
-        # glucose_level = max(3.0, min(18.0, glucose_level)) # Keep within a realistic range
+            records.append((current_time, 'carbs', carbs, encrypt_data(f"Meal, {carbs} g carbs")))
+            insulin_dose = round(carbs / 10, 1)
+            records.append((current_time, 'insulin_bolus', insulin_dose, encrypt_data("Rapid insulin for meal")))
 
         records.append((current_time, 'glucose', round(float(glucose_val), 1), None))
-        
+
     return records
+
+
+def seed_patient_related_data(cur, patient_id, glucose_iterator):
+    params_json = json.dumps(DEFAULT_PARAMETERS)
+    sim_json = json.dumps(DEFAULT_SCENARIO)
+
+    encrypted_params = encrypt_data(params_json)
+    encrypted_sim = encrypt_data(sim_json)
+
+    # Rerun-safe behavior: recreate generated data for this patient.
+    cur.execute("DELETE FROM patients_parameters WHERE patient_id = ?", (patient_id,))
+    cur.execute("DELETE FROM simulator_scenarios WHERE patient_id = ?", (patient_id,))
+    cur.execute("DELETE FROM timeseries_data WHERE patient_id = ?", (patient_id,))
+
+    cur.execute(
+        "INSERT INTO patients_parameters (patient_id, encrypted_parameters) VALUES (?, ?)",
+        (patient_id, encrypted_params)
+    )
+    cur.execute(
+        "INSERT INTO simulator_scenarios (patient_id, encrypted_scenario) VALUES (?, ?)",
+        (patient_id, encrypted_sim)
+    )
+
+    all_timeseries_data = []
+    start_date = datetime.now() - timedelta(days=DAYS_OF_DATA)
+    for day in range(DAYS_OF_DATA):
+        daily_records = simulate_day_data(
+            datetime.combine((start_date + timedelta(days=day)).date(), datetime.min.time()),
+            glucose_iterator
+        )
+        for record in daily_records:
+            all_timeseries_data.append((patient_id, *record))
+
+    cur.executemany(
+        "INSERT INTO timeseries_data (patient_id, timestamp, record_type, value, encrypted_details) VALUES (?, ?, ?, ?, ?)",
+        all_timeseries_data
+    )
+
+    return len(all_timeseries_data)
+
 
 def seed_data():
     con = sqlite3.connect(DB_NAME)
     cur = con.cursor()
-    print(f"Генерация данных для {NUM_PATIENTS} пациентов...")
-    
-    cur.execute("SELECT id FROM doctors WHERE username = 'doctor'")
-    doctor_id = cur.fetchone()[0]
+    print(f"Generating data for {NUM_PATIENTS} random patients...")
 
-    # Load Multibolus.mat data
+    cur.execute("SELECT id FROM doctors WHERE username = 'doctor'")
+    doctor_row = cur.fetchone()
+    if not doctor_row:
+        print("Doctor 'doctor' not found. Run database_setup.py first.")
+        con.close()
+        return
+    doctor_id = doctor_row[0]
+
     mat_file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Multibolus.mat')
     try:
         mat_data = scipy.io.loadmat(mat_file_path)
         x_data = mat_data['x'].flatten()
-        print(f"Loaded 'x' data from {mat_file_path}, shape: {x_data.shape}")
+        print(f"Loaded x data from {mat_file_path}, shape: {x_data.shape}")
     except Exception as e:
         print(f"Error loading {mat_file_path}: {e}")
+        con.close()
         return
 
-    # Build a daily profile with 48 points distributed across full x_data
     points_per_day = (24 * 60) // 30
     sampled_indices = np.linspace(0, len(x_data) - 1, points_per_day, dtype=int)
     daily_glucose_profile = x_data[sampled_indices]
-    # Create an endless iterator for glucose data (repeats full daily profile)
     glucose_iterator = itertools.cycle(daily_glucose_profile)
 
-    for i in range(NUM_PATIENTS):
+    for _ in range(NUM_PATIENTS):
         full_name = fake.name()
         date_of_birth = fake.date_of_birth(minimum_age=20, maximum_age=70)
         contact_info = fake.phone_number()
-        
+
         cur.execute(
             "INSERT INTO patients (doctor_id, encrypted_full_name, date_of_birth, encrypted_contact_info) VALUES (?, ?, ?, ?)",
             (doctor_id, encrypt_data(full_name), date_of_birth, encrypt_data(contact_info))
         )
         patient_id = cur.lastrowid
-        print(f"  Создан пациент: {full_name} (ID: {patient_id})")
+        print(f"  Created patient: {full_name} (ID: {patient_id})")
 
-        # Добавляем параметры для симуляции
-        params_json = json.dumps(DEFAULT_PARAMETERS)
-        sim_json = json.dumps(DEFAULT_SCENARIO)
-        encrypted_params = encrypt_data(params_json)
-        encrypted_sim = encrypt_data(sim_json)
-        cur.execute(
-            "INSERT INTO patients_parameters (patient_id, encrypted_parameters) VALUES (?, ?)",
-            (patient_id, encrypted_params)
-        )
-        cur.execute(
-            "INSERT INTO simulator_scenarios (patient_id, encrypted_scenario) VALUES (?, ?)",
-            (patient_id, encrypted_sim)
-        )
+        inserted_count = seed_patient_related_data(cur, patient_id, glucose_iterator)
+        print(f"    -> Inserted {inserted_count} time-series rows.")
 
-        all_timeseries_data = []
-        start_date = datetime.now() - timedelta(days=DAYS_OF_DATA)
-        for day in range(DAYS_OF_DATA):
-            daily_records = simulate_day_data(
-                datetime.combine((start_date + timedelta(days=day)).date(), datetime.min.time()),
-                glucose_iterator
-            )
-            for record in daily_records:
-                all_timeseries_data.append((patient_id, *record))
-
-        cur.executemany(
-            "INSERT INTO timeseries_data (patient_id, timestamp, record_type, value, encrypted_details) VALUES (?, ?, ?, ?, ?)",
-            all_timeseries_data
-        )
-        print(f"    -> Добавлено {len(all_timeseries_data)} записей.")
+    # Add generated data for the fixed test patient created in database_setup.py.
+    cur.execute("SELECT id FROM patients WHERE username = 'test_patient'")
+    test_patient_row = cur.fetchone()
+    if test_patient_row:
+        test_patient_id = test_patient_row[0]
+        print(f"  Found test_patient (ID: {test_patient_id}), seeding data...")
+        inserted_count = seed_patient_related_data(cur, test_patient_id, glucose_iterator)
+        print(f"    -> Inserted {inserted_count} time-series rows for test_patient.")
+    else:
+        print("  test_patient not found, skipping.")
 
     con.commit()
     con.close()
-    print("\nГенерация данных успешно завершена!")
+    print("\nData generation completed successfully.")
+
 
 if __name__ == "__main__":
     seed_data()

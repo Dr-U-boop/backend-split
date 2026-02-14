@@ -1,7 +1,7 @@
 # backend/database_setup.py
 import sqlite3
 import bcrypt
-from datetime import datetime
+from app.encryption_utils import encrypt_data
 
 DB_NAME = "medical_app.db"
 TEST_PASSWORD = "supersecretpassword123"
@@ -13,10 +13,10 @@ hashed_password = bcrypt.hashpw(password_bytes, salt)
 con = sqlite3.connect(DB_NAME)
 cur = con.cursor()
 
-# --- Включаем поддержку внешних ключей (foreign keys) ---
+# Enable foreign keys
 cur.execute("PRAGMA foreign_keys = ON;")
 
-# --- Обновляем/Создаем таблицу doctors ---
+# doctors table
 cur.execute("""
 CREATE TABLE IF NOT EXISTS doctors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -29,11 +29,13 @@ CREATE TABLE IF NOT EXISTS doctors (
 )
 """)
 
-# --- Создаем таблицу patients ---
+# patients table (with auth fields)
 cur.execute("""
 CREATE TABLE IF NOT EXISTS patients (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     doctor_id INTEGER,
+    username TEXT UNIQUE,
+    hashed_password TEXT,
     encrypted_full_name TEXT NOT NULL,
     encrypted_contact_info TEXT,
     date_of_birth DATE,
@@ -42,7 +44,15 @@ CREATE TABLE IF NOT EXISTS patients (
 )
 """)
 
-# --- Создаем таблицу medical_records ---
+# migration for existing databases
+cur.execute("PRAGMA table_info(patients)")
+patients_columns = {row[1] for row in cur.fetchall()}
+if "username" not in patients_columns:
+    cur.execute("ALTER TABLE patients ADD COLUMN username TEXT UNIQUE")
+if "hashed_password" not in patients_columns:
+    cur.execute("ALTER TABLE patients ADD COLUMN hashed_password TEXT")
+
+# medical_records table
 cur.execute("""
 CREATE TABLE IF NOT EXISTS medical_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,23 +64,68 @@ CREATE TABLE IF NOT EXISTS medical_records (
 )
 """)
 
-# --- Добавляем/Обновляем тестового врача ---
+# upsert test doctor
 cur.execute("SELECT id FROM doctors WHERE username = 'doctor'")
 if cur.fetchone() is None:
     cur.execute("""
     INSERT INTO doctors (username, hashed_password, full_name, specialization)
     VALUES (?, ?, ?, ?)
-    """, ("doctor", hashed_password, "Иван Петрович Сидоров", "Терапевт"))
+    """, ("doctor", hashed_password, "Ivan Petrovich Sidorov", "Therapist"))
 else:
     cur.execute("""
-    UPDATE doctors 
-    SET full_name = ?, specialization = ? 
+    UPDATE doctors
+    SET full_name = ?, specialization = ?
     WHERE username = ?
-    """, ("Иван Петрович Сидоров", "Терапевт", "doctor"))
+    """, ("Ivan Petrovich Sidorov", "Therapist", "doctor"))
 
-# ... (внутри файла database_setup.py)
+# upsert test patient with login/password
+cur.execute("SELECT id FROM doctors WHERE username = 'doctor'")
+doctor_row = cur.fetchone()
+doctor_id = doctor_row[0] if doctor_row else None
 
-# --- Создаем таблицу для временных рядов ---
+if doctor_id is not None:
+    encrypted_test_name = encrypt_data("Test Patient")
+    encrypted_test_contact = encrypt_data("test_patient@example.com")
+
+    cur.execute("SELECT id FROM patients WHERE username = 'test_patient'")
+    if cur.fetchone() is None:
+        cur.execute("""
+        INSERT INTO patients (
+            doctor_id,
+            username,
+            hashed_password,
+            encrypted_full_name,
+            encrypted_contact_info,
+            date_of_birth
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            doctor_id,
+            "test_patient",
+            hashed_password,
+            encrypted_test_name,
+            encrypted_test_contact,
+            "1990-01-01"
+        ))
+    else:
+        cur.execute("""
+        UPDATE patients
+        SET doctor_id = ?,
+            hashed_password = ?,
+            encrypted_full_name = ?,
+            encrypted_contact_info = ?,
+            date_of_birth = ?
+        WHERE username = ?
+        """, (
+            doctor_id,
+            hashed_password,
+            encrypted_test_name,
+            encrypted_test_contact,
+            "1990-01-01",
+            "test_patient"
+        ))
+
+# timeseries_data table
 cur.execute("""
 CREATE TABLE IF NOT EXISTS timeseries_data (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,7 +138,7 @@ CREATE TABLE IF NOT EXISTS timeseries_data (
 )
 """)
 
-# --- Создаем таблицу для сценариев симулятора ---
+# simulator_scenarios table
 cur.execute("""
 CREATE TABLE IF NOT EXISTS simulator_scenarios (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -94,7 +149,7 @@ CREATE TABLE IF NOT EXISTS simulator_scenarios (
 )
 """)
 
-# --- Создаем таблицу для параметров пациентов ---
+# patients_parameters table
 cur.execute("""
 CREATE TABLE IF NOT EXISTS patients_parameters (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,11 +159,7 @@ CREATE TABLE IF NOT EXISTS patients_parameters (
 )
 """)
 
-# ... (в конце файла)
-print(f"Таблица 'timeseries_data' успешно создана/проверена.")
-
-
 con.commit()
 con.close()
 
-print(f"База данных '{DB_NAME}' успешно обновлена по новой схеме.")
+print(f"Database '{DB_NAME}' updated successfully.")
