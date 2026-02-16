@@ -1,17 +1,34 @@
+from datetime import datetime, timedelta
+from typing import List, Optional
+import sqlite3
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List, Optional
-import sqlite3
-from typing import List, Optional
-import sqlite3
-import json
-from app.models import PatientCreate, PatientDisplay, MedicalRecordCreate, SimulatorScenario
-from app.auth_utils import get_current_doctor
-from app.encryption_utils import encrypt_data, decrypt_data
-from app.analysis_utils import analyze_patient_data
-from datetime import datetime, timedelta, time
+
+from app.auth_utils import (
+    ensure_doctor_access_to_patient,
+    fetch_patient_comprehensive_data,
+    fetch_patient_diary_entries,
+    fetch_patient_glucose_data,
+    fetch_patient_parameters,
+    fetch_patient_recommendations,
+    fetch_patient_scenarios,
+    get_current_doctor,
+    get_current_patient,
+    row_to_patient_display,
+)
+from app.encryption_utils import encrypt_data
+from app.models import (
+    DiaryEntryDisplay,
+    MedicalRecordCreate,
+    PatientCreate,
+    PatientDisplay,
+    PatientTimeSeriesDataIngest,
+    SimulatorScenario,
+)
 
 router = APIRouter()
 DB_NAME = "medical_app.db"
+
 
 @router.post("/", response_model=PatientDisplay, status_code=status.HTTP_201_CREATED)
 def create_patient(patient: PatientCreate, current_doctor: dict = Depends(get_current_doctor)):
@@ -26,7 +43,7 @@ def create_patient(patient: PatientCreate, current_doctor: dict = Depends(get_cu
         INSERT INTO patients (doctor_id, encrypted_full_name, date_of_birth, encrypted_contact_info)
         VALUES (?, ?, ?, ?)
         """,
-        (current_doctor["id"], encrypted_name, patient.date_of_birth, encrypted_contact)
+        (current_doctor["id"], encrypted_name, patient.date_of_birth, encrypted_contact),
     )
 
     new_patient_id = cur.lastrowid
@@ -34,302 +51,302 @@ def create_patient(patient: PatientCreate, current_doctor: dict = Depends(get_cu
     con.close()
 
     return PatientDisplay(
-        id = new_patient_id,
-        doctor_id = current_doctor["id"],
-        created_at = datetime.now(),
-        **patient.dict()
+        id=new_patient_id,
+        doctor_id=current_doctor["id"],
+        created_at=datetime.now(),
+        **patient.dict(),
     )
+
 
 @router.get("/", response_model=List[PatientDisplay])
 def get_my_patients(current_doctor: dict = Depends(get_current_doctor)):
-    """Возвращает список всех пациентов для текущего врача."""
     con = sqlite3.connect(DB_NAME)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
-    
+
     cur.execute("SELECT * FROM patients WHERE doctor_id = ?", (current_doctor["id"],))
     patients_records = cur.fetchall()
     con.close()
-    
-    patients_list = []
-    for record in patients_records:
-        patients_list.append(PatientDisplay(
-            id=record["id"],
-            doctor_id=record["doctor_id"],
-            full_name=decrypt_data(record["encrypted_full_name"]),
-            contact_info=decrypt_data(record["encrypted_contact_info"]) if record["encrypted_contact_info"] else None,
-            date_of_birth=record["date_of_birth"],
-            created_at=record["created_at"]
-        ))
-    return patients_list
 
-@router.post("/{patient_id}/records", status_code=status.HTTP_201_CREATED)
-def add_medical_record(patient_id: int, record: MedicalRecordCreate, current_doctor: dict = Depends(get_current_doctor)):
-    """Добавляет новую медицинскую запись для указанного пациента."""
-    # Здесь нужна проверка, что врач имеет право добавлять запись для этого пациента
-    encrypted_data = encrypt_data(record.record_data)
+    return [row_to_patient_display(record) for record in patients_records]
+
+
+@router.get("/me", response_model=PatientDisplay)
+def get_current_patient_profile(current_patient: dict = Depends(get_current_patient)):
+    return row_to_patient_display(current_patient)
+
+
+@router.get("/me/glucose_data")
+def get_current_patient_glucose_data(
+    current_patient: dict = Depends(get_current_patient),
+    start_datetime: Optional[datetime] = None,
+    end_datetime: Optional[datetime] = None,
+):
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+    result = fetch_patient_glucose_data(cur, current_patient["id"], start_datetime, end_datetime)
+    con.close()
+    return result
+
+
+@router.get("/me/comprehensive_data")
+def get_current_patient_comprehensive_data(
+    current_patient: dict = Depends(get_current_patient),
+    start_datetime: Optional[datetime] = None,
+    end_datetime: Optional[datetime] = None,
+):
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+    result = fetch_patient_comprehensive_data(cur, current_patient["id"], start_datetime, end_datetime)
+    con.close()
+    return result
+
+
+@router.get("/me/recommendations")
+def get_current_patient_recommendations(current_patient: dict = Depends(get_current_patient)):
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+    result = fetch_patient_recommendations(cur, current_patient["id"])
+    con.close()
+    return result
+
+
+@router.get("/me/parameters")
+def get_current_patient_parameters(current_patient: dict = Depends(get_current_patient)):
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+    try:
+        result = fetch_patient_parameters(cur, current_patient["id"])
+    except Exception as e:
+        con.close()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"РћС€РёР±РєР° РґРµС€РёС„СЂРѕРІРєРё РїР°СЂР°РјРµС‚СЂРѕРІ: {str(e)}",
+        )
+    con.close()
+    return result
+
+
+@router.get("/me/scenarios", response_model=List[SimulatorScenario])
+def get_current_patient_scenarios(current_patient: dict = Depends(get_current_patient)):
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+    result = fetch_patient_scenarios(cur, current_patient["id"])
+    con.close()
+    return result
+
+
+@router.get("/me/diary", response_model=List[DiaryEntryDisplay])
+def get_current_patient_diary_entries(
+    current_patient: dict = Depends(get_current_patient),
+    start_datetime: Optional[datetime] = None,
+    end_datetime: Optional[datetime] = None,
+):
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+    result = fetch_patient_diary_entries(cur, current_patient["id"], start_datetime, end_datetime)
+    con.close()
+    return result
+
+
+@router.post("/me/timeseries_data", status_code=status.HTTP_201_CREATED)
+def add_current_patient_timeseries_data(
+    payload: PatientTimeSeriesDataIngest,
+    current_patient: dict = Depends(get_current_patient),
+):
+    if not payload.data_points:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Список data_points не должен быть пустым",
+        )
+
+    records_to_insert = []
+    for point in payload.data_points:
+        record_type = point.record_type.strip().lower()
+
+        if record_type in {"glucose", "carbs"} or "insulin" in record_type:
+            if point.value is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Для glucose/carbs/insulin поле value обязательно",
+                )
+            stored_value = point.value
+            stored_type = record_type
+        elif record_type in {"self_monitoring_diary", "diary", "patient_diary", "self_monitoring"}:
+            if not point.details or not point.details.strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Для записи дневника требуется непустое поле details",
+                )
+            stored_value = 0.0
+            stored_type = "self_monitoring_diary"
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="record_type должен быть glucose, carbs, содержать insulin или быть self_monitoring_diary",
+            )
+
+        details = encrypt_data(point.details) if point.details else None
+        records_to_insert.append(
+            (current_patient["id"], point.timestamp, stored_type, stored_value, details)
+        )
+
     con = sqlite3.connect(DB_NAME)
     cur = con.cursor()
-    cur.execute(
-        "INSERT INTO medical_records (patient_id, record_date, encrypted_record_data) VALUES (?, ?, ?)",
-        (patient_id, record.record_date, encrypted_data)
+    cur.executemany(
+        "INSERT INTO timeseries_data (patient_id, timestamp, record_type, value, encrypted_details) VALUES (?, ?, ?, ?, ?)",
+        records_to_insert,
     )
     con.commit()
     con.close()
-    return {"message": "Запись успешно добавлена"}
+
+    return {"message": f"Добавлено {len(records_to_insert)} записей"}
+
+@router.post("/{patient_id}/records", status_code=status.HTTP_201_CREATED)
+def add_medical_record(patient_id: int, record: MedicalRecordCreate, current_doctor: dict = Depends(get_current_doctor)):
+    encrypted_data = encrypt_data(record.record_data)
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+
+    ensure_doctor_access_to_patient(cur, current_doctor["id"], patient_id)
+
+    cur.execute(
+        "INSERT INTO medical_records (patient_id, record_date, encrypted_record_data) VALUES (?, ?, ?)",
+        (patient_id, record.record_date, encrypted_data),
+    )
+    con.commit()
+    con.close()
+    return {"message": "Р—Р°РїРёСЃСЊ СѓСЃРїРµС€РЅРѕ РґРѕР±Р°РІР»РµРЅР°"}
+
 
 @router.delete("/{patient_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_patient(patient_id: int, current_doctor: dict = Depends(get_current_doctor)):
-    """Удаляет пациента и все его медицинские записи."""
-    # Важно: проверить, что врач-владелец удаляет своего пациента
     con = sqlite3.connect(DB_NAME)
     cur = con.cursor()
     cur.execute("DELETE FROM patients WHERE id = ? AND doctor_id = ?", (patient_id, current_doctor["id"]))
     con.commit()
     if cur.rowcount == 0:
         con.close()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден или у вас нет прав на его удаление")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="РџР°С†РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ РёР»Рё Сѓ РІР°СЃ РЅРµС‚ РїСЂР°РІ РЅР° РµРіРѕ СѓРґР°Р»РµРЅРёРµ")
     con.close()
     return
 
-@router.get("/{patient_id}", response_model=PatientDisplay) # Для простоты пока оставим PatientDisplay
+
+@router.get("/{patient_id}", response_model=PatientDisplay)
 def get_patient_details(patient_id: int, current_doctor: dict = Depends(get_current_doctor)):
-    """Возвращает детальную информацию о конкретном пациенте и его мед. записи."""
     con = sqlite3.connect(DB_NAME)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
 
-    # Проверяем, существует ли пациент и принадлежит ли он этому врачу
     cur.execute("SELECT * FROM patients WHERE id = ? AND doctor_id = ?", (patient_id, current_doctor["id"]))
     patient_record = cur.fetchone()
-
-    if not patient_record:
-        con.close()
-        raise HTTPException(status_code=status.HTTP_4_NOT_FOUND, detail="Пациент не найден")
-
-    # Получаем медицинские записи для этого пациента
-    cur.execute("SELECT * FROM medical_records WHERE patient_id = ? ORDER BY record_date DESC", (patient_id,))
-    medical_records = cur.fetchall()
     con.close()
 
-    # Дешифруем данные пациента
-    patient_details = PatientDisplay(
-        id=patient_record["id"],
-        doctor_id=patient_record["doctor_id"],
-        full_name=decrypt_data(patient_record["encrypted_full_name"]),
-        contact_info=decrypt_data(patient_record["encrypted_contact_info"]) if patient_record["encrypted_contact_info"] else None,
-        date_of_birth=patient_record["date_of_birth"],
-        created_at=patient_record["created_at"]
-    )
-    
-    # В будущем мы добавим записи в модель ответа
-    # patient_details.records = [ ...дешифрованные записи... ]
+    if not patient_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="РџР°С†РёРµРЅС‚ РЅРµ РЅР°Р№РґРµРЅ")
 
-    return patient_details
+    return row_to_patient_display(patient_record)
+
 
 @router.get("/{patient_id}/glucose_data")
 def get_patient_glucose_data(
-    patient_id: int, 
+    patient_id: int,
     current_doctor: dict = Depends(get_current_doctor),
-    start_datetime: Optional[datetime] = None, # <--- Принимаем полную дату и время
-    end_datetime: Optional[datetime] = None
+    start_datetime: Optional[datetime] = None,
+    end_datetime: Optional[datetime] = None,
 ):
-    """
-    Возвращает данные о глюкозе. По умолчанию за последние 7 дней.
-    Если даты и время указаны, фильтрует по ним.
-    """
-    # ... (проверка доступа врача остается без изменений) ...
     con = sqlite3.connect(DB_NAME)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
-    cur.execute("SELECT id FROM patients WHERE id = ? AND doctor_id = ?", (patient_id, current_doctor["id"]))
-    if cur.fetchone() is None:
-        con.close()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
 
-    if start_datetime and end_datetime:
-        query = """
-            SELECT timestamp, value FROM timeseries_data 
-            WHERE patient_id = ? AND record_type = 'glucose' AND timestamp BETWEEN ? AND ?
-            ORDER BY timestamp ASC
-        """
-        params = (patient_id, start_datetime, end_datetime)
-    else:
-        # --- ЛОГИКА ПО УМОЛЧАНИЮ (ПОСЛЕДНИЕ 7 ДНЕЙ) ---
-        seven_days_ago = datetime.utcnow() - timedelta(days=7)
-        query = """
-            SELECT timestamp, value FROM timeseries_data 
-            WHERE patient_id = ? AND record_type = 'glucose' AND timestamp >= ?
-            ORDER BY timestamp ASC
-        """
-        params = (patient_id, seven_days_ago)
-        
-    cur.execute(query, params)
-    glucose_records = cur.fetchall()
+    ensure_doctor_access_to_patient(cur, current_doctor["id"], patient_id)
+    result = fetch_patient_glucose_data(cur, patient_id, start_datetime, end_datetime)
     con.close()
+    return result
 
-    labels = [datetime.fromisoformat(rec["timestamp"]).strftime('%d.%m %H:%M') for rec in glucose_records]
-    data = [rec["value"] for rec in glucose_records]
-
-    return {"labels": labels, "data": data}
-
- # backend/app/routers/patients.py
-# ...
 
 @router.get("/{patient_id}/comprehensive_data")
 def get_patient_comprehensive_data(
-    patient_id: int, 
+    patient_id: int,
     current_doctor: dict = Depends(get_current_doctor),
     start_datetime: Optional[datetime] = None,
-    end_datetime: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None,
 ):
-    """
-    Возвращает полный набор данных (глюкоза, инсулин, углеводы) за период.
-    """
-    # ... (проверка доступа врача остается без изменений) ...
     con = sqlite3.connect(DB_NAME)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
-    # Проверяем, существует ли пациент и принадлежит ли он этому врачу
-    cur.execute("SELECT * FROM patients WHERE id = ? AND doctor_id = ?", (patient_id, current_doctor["id"]))
-    patient_record = cur.fetchone()
 
-    if not patient_record:
-        con.close()
-        raise HTTPException(status_code=status.HTTP_4_NOT_FOUND, detail="Пациент не найден")
-    
-    if not (start_datetime and end_datetime):
-        end_datetime = datetime.utcnow()
-        start_datetime = end_datetime - timedelta(days=7)
-
-    cur.execute(
-        """
-        SELECT timestamp, record_type, value FROM timeseries_data 
-        WHERE patient_id = ? AND timestamp BETWEEN ? AND ?
-        ORDER BY timestamp ASC
-        """,
-        (patient_id, start_datetime, end_datetime)
-    )
-    records = cur.fetchall()
+    ensure_doctor_access_to_patient(cur, current_doctor["id"], patient_id)
+    result = fetch_patient_comprehensive_data(cur, patient_id, start_datetime, end_datetime)
     con.close()
+    return result
 
-    # Форматируем данные в удобную для Chart.js структуру
-    response_data = {
-        "glucose": [],
-        "insulin": [],
-        "carbs": []
-    }
-    for rec in records:
-        point = {"x": rec["timestamp"], "y": rec["value"]}
-        if rec["record_type"] == 'glucose':
-            response_data["glucose"].append(point)
-        elif 'insulin' in rec["record_type"]:
-            response_data["insulin"].append(point)
-        elif rec["record_type"] == 'carbs':
-            response_data["carbs"].append(point)
-
-    return response_data
 
 @router.get("/{patient_id}/recommendations")
 def get_patient_recommendations(patient_id: int, current_doctor: dict = Depends(get_current_doctor)):
-    """
-    Анализирует данные пациента за последние 30 дней и возвращает рекомендации.
-    """
     con = sqlite3.connect(DB_NAME)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
 
-    # Проверяем, принадлежит ли пациент врачу
-    cur.execute("SELECT id FROM patients WHERE id = ? AND doctor_id = ?", (patient_id, current_doctor["id"]))
-    if cur.fetchone() is None:
-        con.close()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
-
-    # Загружаем ВСЕ данные за месяц
-    month_ago = datetime.utcnow() - timedelta(days=30)
-    cur.execute(
-        "SELECT timestamp, record_type, value FROM timeseries_data WHERE patient_id = ? AND timestamp >= ?",
-        (patient_id, month_ago)
-    )
-
-    # Преобразуем строки в словари
-    records = [
-        {
-            "timestamp": datetime.fromisoformat(rec["timestamp"]),
-            "record_type": rec["record_type"],
-            "value": rec["value"]
-        }
-        for rec in cur.fetchall()
-    ]
-
+    ensure_doctor_access_to_patient(cur, current_doctor["id"], patient_id)
+    result = fetch_patient_recommendations(cur, patient_id)
     con.close()
-    recommendations = analyze_patient_data(records)
-    return {"recommendations": recommendations}
-    con.close()
-    recommendations = analyze_patient_data(records)
-    return {"recommendations": recommendations}
+    return result
+
 
 @router.get("/{patient_id}/parameters")
 def get_patient_parameters(patient_id: int, current_doctor: dict = Depends(get_current_doctor)):
-    """
-    Возвращает расшифрованные параметры симуляции пациента.
-    """
     con = sqlite3.connect(DB_NAME)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
 
-    # Проверка доступа
-    cur.execute("SELECT id FROM patients WHERE id = ? AND doctor_id = ?", (patient_id, current_doctor["id"]))
-    if cur.fetchone() is None:
-        con.close()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
-
-    cur.execute("SELECT encrypted_parameters FROM patients_parameters WHERE patient_id = ?", (patient_id,))
-    record = cur.fetchone()
-    con.close()
-
-    if not record:
-        return {} # Или ошибка, если параметры обязательны
+    ensure_doctor_access_to_patient(cur, current_doctor["id"], patient_id)
 
     try:
-        decrypted_json_str = decrypt_data(record["encrypted_parameters"])
-        import json
-        return json.loads(decrypted_json_str)
+        result = fetch_patient_parameters(cur, patient_id)
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ошибка дешифровки параметров: {str(e)}")
+        con.close()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"РћС€РёР±РєР° РґРµС€РёС„СЂРѕРІРєРё РїР°СЂР°РјРµС‚СЂРѕРІ: {str(e)}",
+        )
+
+    con.close()
+    return result
+
 
 @router.get("/{patient_id}/scenarios", response_model=List[SimulatorScenario])
 def get_simulator_scenarios(patient_id: int, current_doctor: dict = Depends(get_current_doctor)):
-    """
-    Возвращает список сценариев симуляции для конкретного пациента.
-    """
     con = sqlite3.connect(DB_NAME)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
 
-    # Проверка доступа
-    cur.execute("SELECT id FROM patients WHERE id = ? AND doctor_id = ?", (patient_id, current_doctor["id"]))
-    if cur.fetchone() is None:
-        con.close()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пациент не найден")
-
-    cur.execute("SELECT id, patient_id, encrypted_scenario FROM simulator_scenarios WHERE patient_id = ?", (patient_id,))
-    records = cur.fetchall()
+    ensure_doctor_access_to_patient(cur, current_doctor["id"], patient_id)
+    result = fetch_patient_scenarios(cur, patient_id)
     con.close()
+    return result
 
-    scenarios = []
-    for rec in records:
-        try:
-            decrypted_str = decrypt_data(rec["encrypted_scenario"])
-            scenario_json = json.loads(decrypted_str)
-            scenarios.append(SimulatorScenario(
-                scenario_id=rec["id"],
-                patient_id=rec["patient_id"],
-                scenario_data=scenario_json
-            ))
-        except Exception:
-             # В случае ошибки дешифровки или парсинга можно вернуть заглушку или пропустить
-             # Для отладки оставим как есть, возможно стоит логировать
-             continue
-    
-    return scenarios
+
+@router.get("/{patient_id}/diary", response_model=List[DiaryEntryDisplay])
+def get_patient_diary_entries(
+    patient_id: int,
+    current_doctor: dict = Depends(get_current_doctor),
+    start_datetime: Optional[datetime] = None,
+    end_datetime: Optional[datetime] = None,
+):
+    con = sqlite3.connect(DB_NAME)
+    con.row_factory = sqlite3.Row
+    cur = con.cursor()
+
+    ensure_doctor_access_to_patient(cur, current_doctor["id"], patient_id)
+    result = fetch_patient_diary_entries(cur, patient_id, start_datetime, end_datetime)
+    con.close()
+    return result
+

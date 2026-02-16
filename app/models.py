@@ -40,6 +40,19 @@ class TimeSeriesDataIngest(BaseModel):
      patient_id: int
      data_points: List[TimeSeriesDataPoint]
 
+class PatientTimeSeriesDataPoint(BaseModel):
+     timestamp: datetime
+     record_type: str
+     value: Optional[float] = None
+     details: Optional[str] = None
+
+class PatientTimeSeriesDataIngest(BaseModel):
+     data_points: List[PatientTimeSeriesDataPoint]
+
+class DiaryEntryDisplay(BaseModel):
+    timestamp: datetime
+    text: str
+
 class PatientParameters(BaseModel):
     patient_id: int
     encrypted_parameters: str
