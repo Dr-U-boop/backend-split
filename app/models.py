@@ -1,6 +1,6 @@
 from pydantic import BaseModel
 from datetime import date, datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 class PatientBase(BaseModel):
     full_name: str
@@ -61,3 +61,19 @@ class SimulatorScenario(BaseModel):
     scenario_id: int
     patient_id: int
     scenario_data: dict
+
+
+class SimulatorParametersUpdate(BaseModel):
+    parameters: dict[str, Any]
+
+
+class SimulatorScenarioUpdate(BaseModel):
+    scenario_data: dict[str, Any]
+
+
+class SimulatorRunRequest(BaseModel):
+    parameters: Optional[dict[str, Any]] = None
+    scenario_data: Optional[dict[str, Any]] = None
+    scenario_id: Optional[int] = None
+    model_type: Optional[str] = "sibr"
+    cgm_noise_seed: Optional[int] = None
