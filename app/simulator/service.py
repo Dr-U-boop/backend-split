@@ -199,12 +199,12 @@ def _compute_metrics(g: np.ndarray, tm: int, Tm: int, g_delay: np.ndarray) -> di
         "min": float(np.min(g)),
         "max": float(np.max(g)),
         "min_with_30min_meal_delay": float(np.min(g_delay)),
-        "fraction_below_target": float(np.mean(g < 100.0)),
-        "fraction_above_target": float(np.mean(g > 180.0)),
-        "fraction_within_target": float(np.mean((g >= 100.0) & (g <= 180.0))),
-        "fraction_below_critical": float(np.mean(g < 70.0)),
-        "fraction_above_critical": float(np.mean(g > 230.0)),
-        "integral_above_180": float(np.sum((g - 180.0) * (g > 180.0))),
+        "fraction_below_target": float(np.mean(g < 3.9)),
+        "fraction_above_target": float(np.mean(g > 10.0)),
+        "fraction_within_target": float(np.mean((g >= 3.9) & (g <= 10.0))),
+        "fraction_below_critical": float(np.mean(g < 3.9)),
+        "fraction_above_critical": float(np.mean(g > (230.0 / 18.0))),
+        "integral_above_180": float(np.sum((g - 10.0) * (g > 10.0))),
     }
     return metrics
 
@@ -263,12 +263,15 @@ def run_simulation(
     if cgm_noise_seed is not None:
         noise_profile = _johnson_su_noise(glucose_raw, cgm_noise_seed)
 
+    glucose_mmol = glucose_raw / 18.0
+    glucose_mmol_delay = glucose_raw_delay / 18.0
+
     return {
         "model_type": model_type,
         "time": time_arr.tolist(),
         "glucose": glucose_raw.tolist(),
         "glucose_delay_30m": glucose_raw_delay.tolist(),
-        "glucose_mmol": (glucose_raw / 18.0).tolist(),
-        "metrics": _compute_metrics(glucose_raw, tm=tm, Tm=Tm, g_delay=glucose_raw_delay),
+        "glucose_mmol": glucose_mmol.tolist(),
+        "metrics": _compute_metrics(glucose_mmol, tm=tm, Tm=Tm, g_delay=glucose_mmol_delay),
         "cgm_noisy_trace": noise_profile.tolist() if noise_profile is not None else None,
     }
