@@ -11,6 +11,7 @@ DB_NAME = "medical_app.db"
 
 @router.post("/login")
 async def login_doctor(credentials: UserCredentials):
+    print(f"[login] doctor login attempt: username={credentials.username}")
     con = sqlite3.connect(DB_NAME)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
@@ -18,14 +19,17 @@ async def login_doctor(credentials: UserCredentials):
     user_record = cur.fetchone()
     con.close()
 
+    print(f"[login] doctor lookup: username={credentials.username} found={user_record is not None}")
     if not user_record:
         raise HTTPException(status_code=401, detail="Неверное имя пользователя или пароль")
 
     stored_hashed_password = user_record["hashed_password"]
     password_bytes = credentials.password.encode("utf-8")
     if not bcrypt.checkpw(password_bytes, stored_hashed_password):
+        print(f"[login] password check failed for doctor username={credentials.username}")
         raise HTTPException(status_code=401, detail="Неверное имя пользователя или пароль")
 
+    print(f"[login] issuing doctor token: sub={user_record['username']} doctor_id={user_record['id']}")
     access_token = create_access_token(
         data={
             "sub": user_record["username"],
@@ -38,6 +42,7 @@ async def login_doctor(credentials: UserCredentials):
 
 @router.post("/patient/login")
 async def login_patient(credentials: UserCredentials):
+    print(f"[login] patient login attempt: username={credentials.username}")
     con = sqlite3.connect(DB_NAME)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
@@ -45,14 +50,17 @@ async def login_patient(credentials: UserCredentials):
     patient_record = cur.fetchone()
     con.close()
 
+    print(f"[login] patient lookup: username={credentials.username} found={patient_record is not None}")
     if not patient_record or not patient_record["hashed_password"]:
         raise HTTPException(status_code=401, detail="Неверное имя пользователя или пароль")
 
     stored_hashed_password = patient_record["hashed_password"]
     password_bytes = credentials.password.encode("utf-8")
     if not bcrypt.checkpw(password_bytes, stored_hashed_password):
+        print(f"[login] password check failed for patient username={credentials.username}")
         raise HTTPException(status_code=401, detail="Неверное имя пользователя или пароль")
 
+    print(f"[login] issuing patient token: sub={patient_record['username']} patient_id={patient_record['id']}")
     access_token = create_access_token(
         data={
             "sub": patient_record["username"],

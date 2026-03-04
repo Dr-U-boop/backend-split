@@ -43,20 +43,27 @@ def _credentials_exception() -> HTTPException:
 
 def _decode_token(token: str) -> dict:
     try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except JWTError:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        print(f"[auth] token decoded: sub={payload.get('sub')} role={payload.get('role')}")
+        return payload
+    except JWTError as exc:
+        print(f"[auth] token decode failed: {exc}")
         raise _credentials_exception()
 
 
 def get_current_doctor(token: str = Depends(oauth2_scheme)):
+    print(f"[auth] raw token present={bool(token)} prefix={token[:20] if token else None}")
     payload = _decode_token(token)
     if payload.get("role") != "doctor":
+        print(f"[auth] invalid role for doctor route: {payload.get('role')}")
         raise _credentials_exception()
 
     username = payload.get("sub")
     if username is None:
+        print("[auth] missing sub in doctor token payload")
         raise _credentials_exception()
 
+    print(f"[auth] doctor lookup DB_NAME={DB_NAME} cwd={os.getcwd()}")
     con = sqlite3.connect(DB_NAME)
     con.row_factory = sqlite3.Row
     cur = con.cursor()
@@ -64,6 +71,7 @@ def get_current_doctor(token: str = Depends(oauth2_scheme)):
     user = cur.fetchone()
     con.close()
 
+    print(f"[auth] doctor lookup: username={username} found={user is not None}")
     if user is None:
         raise _credentials_exception()
 
@@ -71,12 +79,15 @@ def get_current_doctor(token: str = Depends(oauth2_scheme)):
 
 
 def get_current_patient(token: str = Depends(oauth2_scheme)):
+    print(f"[auth] raw patient token present={bool(token)} prefix={token[:20] if token else None}")
     payload = _decode_token(token)
     if payload.get("role") != "patient":
+        print(f"[auth] invalid role for patient route: {payload.get('role')}")
         raise _credentials_exception()
 
     patient_id = payload.get("patient_id")
     if patient_id is None:
+        print("[auth] missing patient_id in patient token payload")
         raise _credentials_exception()
 
     con = sqlite3.connect(DB_NAME)
@@ -86,6 +97,7 @@ def get_current_patient(token: str = Depends(oauth2_scheme)):
     patient = cur.fetchone()
     con.close()
 
+    print(f"[auth] patient lookup: patient_id={patient_id} found={patient is not None}")
     if patient is None:
         raise _credentials_exception()
 
