@@ -187,7 +187,7 @@ def seed_data():
         return
     doctor_id = doctor_row[0]
 
-    mat_file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Multibolus.mat')
+    mat_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Multibolus.mat')
     try:
         mat_data = scipy.io.loadmat(mat_file_path)
         x_data = mat_data['x'].flatten()
