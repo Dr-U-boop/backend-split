@@ -13,6 +13,9 @@ RE_PERCENT = re.compile(rf"(?P<value>{FLOAT_RE})\s*%")
 RE_TEMP_BASAL = re.compile(
     rf"(?:врем\w*\s+баз\w*|temp\s+basal).{{0,20}}?(?P<value>[-+]?{FLOAT_RE})\s*%",
 )
+RE_BASAL_PERCENT = re.compile(
+    rf"(?:базал\w*|баз\w*).{{0,20}}?(?P<value>[-+]?{FLOAT_RE})\s*%"
+)
 RE_TIME_INTERVAL = re.compile(
     rf"(?:с|от)\s*(?P<start>{TIME_TOKEN_RE})\s*(?:до|по|-)\s*(?P<end>{TIME_TOKEN_RE})"
 )
@@ -24,30 +27,36 @@ RE_BASAL_RATE_SOFT = re.compile(
     rf"(?:баз\w*\s+(?:скор\w*)?|базал\w*).{{0,20}}?(?P<value>{FLOAT_RE})(?:\s*ед/ч)?"
 )
 RE_CARB_RATIO = re.compile(rf"1\s*ед\s*/\s*(?P<grams>{FLOAT_RE})\s*г\b")
+RE_CARB_RATIO_COLON = re.compile(
+    rf"(?:угл\w*|коэф\w*|коэфф\w*|ук|завтрак|обед|ужин).{{0,20}}?1\s*:\s*(?P<grams>{FLOAT_RE})"
+)
 RE_CORRECTION_FACTOR = re.compile(
     rf"1\s*ед\s*/\s*(?P<mmol>{FLOAT_RE})\s*ммоль/л\b"
 )
 RE_CORRECTION_FACTOR_EQ = re.compile(
     rf"1\s*ед\s*(?:=|/)\s*(?P<mmol>{FLOAT_RE})\s*ммоль(?:/л)?\b"
 )
+RE_CORRECTION_FACTOR_COLON = re.compile(
+    rf"(?:чувств\w*|фактор\w*).{{0,20}}?1\s*:\s*(?P<mmol>{FLOAT_RE})"
+)
 RE_TARGET_RANGE = re.compile(
     rf"(?P<min>{FLOAT_RE})\s*-\s*(?P<max>{FLOAT_RE})(?:\s*ммоль/л\b)?"
 )
 RE_TARGET_SINGLE = re.compile(rf"(?P<value>{FLOAT_RE})(?:\s*ммоль/л\b)?")
 RE_PREBOLUS = re.compile(
-    rf"(?:предболюс|prebolus).{{0,12}}?(?P<value>{FLOAT_RE})\s*(?P<unit>мин|ч)\b"
+    rf"(?:предболюс|prebolus|предболус|пред-болюс).{{0,12}}?(?P<value>{FLOAT_RE})\s*(?P<unit>мин|ч)\b"
 )
 RE_ACTIVE_INSULIN = re.compile(
-    rf"(?:активн\w*\s+инсулин|длительн\w*\s+инсулина|dia).{{0,12}}?(?P<value>{FLOAT_RE})\s*(?P<unit>ч|мин)\b"
+    rf"(?:активн\w*\s+инсул\w*|длительн\w*\s+инсулина|dia|актив\w*\s+инс\w*).{{0,12}}?(?P<value>{FLOAT_RE})\s*(?P<unit>ч|мин)\b"
 )
 RE_CORRECTION_INTERVAL = re.compile(
-    rf"(?:не\s+корректир\w*\s+раньше|коррекц\w*\s+не\s+раньше|интервал\s+коррекц\w*).{{0,20}}?(?P<value>{FLOAT_RE})\s*(?P<unit>ч|мин)\b"
+    rf"(?:не\s+корректир\w*\s+раньше|не\s+корриг\w*\s+раньше|коррекц\w*\s+не\s+раньше(?:\s+чем\s+через)?|интервал\s+коррекц\w*|коррекц\w*\s+интервал\w*|коррект\w*\s+интервал\w*|не\s+делать\s+повтор\s+коррекц\w*|интрвал\w*\s+не\s+ранее).{{0,30}}?(?P<value>{FLOAT_RE})\s*(?P<unit>ч|мин)\b"
 )
 RE_LOW_ALERT = re.compile(
-    rf"(?:порог\s+низк\w*\s+глюкоз\w*|низк\w*\s+порог|гипо\s+порог).{{0,20}}?(?P<value>{FLOAT_RE})(?:\s*ммоль/л)?"
+    rf"(?:порог\s+низк\w*\s+глюк\w*|низк\w*\s+порог|гипо\s+порог|порог\s+низкой).{{0,20}}?(?P<value>{FLOAT_RE})(?:\s*ммоль/л)?"
 )
 RE_HIGH_ALERT = re.compile(
-    rf"(?:порог\s+высок\w*\s+глюкоз\w*|высок\w*\s+порог|гипер\s+порог).{{0,20}}?(?P<value>{FLOAT_RE})(?:\s*ммоль/л)?"
+    rf"(?:порог\s+высок\w*\s+глюк\w*|высок\w*\s+порог|гипер\s+порог|порог\s+высокой).{{0,20}}?(?P<value>{FLOAT_RE})(?:\s*ммоль/л)?"
 )
 RE_DUAL_BOLUS = re.compile(
     rf"(?P<first>{FLOAT_RE})\s*%\s*(?:сразу|немедленно)?\s*(?:и|/)\s*(?P<second>{FLOAT_RE})\s*%\s*(?:за|на)\s*(?P<duration>{FLOAT_RE})\s*(?P<unit>ч|мин)"

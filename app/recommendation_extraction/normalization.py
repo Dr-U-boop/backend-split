@@ -85,6 +85,19 @@ def normalize_text(text: str) -> tuple[str, list[str]]:
             normalized = normalized.replace(wrong, right)
             warnings.append(f"autocorrect:{wrong}->{right}")
 
+    extra_typos = {
+        "корект": "коррект",
+        "интрвал": "интервал",
+        "ранше": "раньше",
+        "предболус": "предболюс",
+        "коррегировать": "корректировать",
+        "корегировать": "корректировать",
+    }
+    for wrong, right in extra_typos.items():
+        if wrong in normalized:
+            normalized = normalized.replace(wrong, right)
+            warnings.append(f"autocorrect:{wrong}->{right}")
+
     # Split merged number+unit tokens: 10гр -> 10 гр, 1ед -> 1 ед.
     normalized = re.sub(r"(?<=\d)(ед|гр|г|ммольл|ммоль|мин|ч)\b", r" \1", normalized)
 
