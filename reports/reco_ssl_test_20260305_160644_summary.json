@@ -1,0 +1,7 @@
+{
+  "pass": 13,
+  "fail": 0,
+  "total": 13,
+  "pass_rate": 1.0,
+  "jsonl_report": "reports/reco_ssl_test_20260305_160644.jsonl"
+}
