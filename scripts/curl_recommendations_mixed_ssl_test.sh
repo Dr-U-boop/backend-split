@@ -55,7 +55,7 @@ while IFS= read -r text; do
     curl -sS ${CURL_TLS_FLAG} -X POST "${BASE_URL}${INTERPRET_MULTI_PATH}" \
       -H "Authorization: Bearer ${TOKEN}" \
       -H "Content-Type: application/json" \
-      --data "$(python3 -c 'import json,sys; print(json.dumps({\"text\": sys.argv[1]}, ensure_ascii=False))' "${text}")"
+      --data "$(python3 -c 'import json,sys; print(json.dumps({"text": sys.argv[1]}, ensure_ascii=False))' "${text}")"
   )"
 
   eval_json="$(
