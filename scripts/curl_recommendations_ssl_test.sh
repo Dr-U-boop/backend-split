@@ -7,6 +7,10 @@ INTERPRET_PATH="${INTERPRET_PATH:-/api/recommendations/interpret}"
 USERNAME="${USERNAME:-doctor}"
 PASSWORD="${PASSWORD:-supersecretpassword123}"
 INSECURE_TLS="${INSECURE_TLS:-1}"
+REPORT_DIR="${REPORT_DIR:-reports}"
+REPORT_PREFIX="${REPORT_PREFIX:-reco_ssl_test_$(date +%Y%m%d_%H%M%S)}"
+REPORT_JSONL="${REPORT_DIR}/${REPORT_PREFIX}.jsonl"
+REPORT_SUMMARY_JSON="${REPORT_DIR}/${REPORT_PREFIX}_summary.json"
 
 if [[ "${INSECURE_TLS}" == "1" ]]; then
   CURL_TLS_FLAG="--insecure"
@@ -30,6 +34,8 @@ fi
 echo "Token acquired."
 
 echo "[2/3] Run recommendation tests"
+mkdir -p "${REPORT_DIR}"
+: > "${REPORT_JSONL}"
 
 declare -a CASES=(
   "basal_rate|Изменить базальную скорость до 0.80 Ед/ч в период 23:00-02:00"
@@ -66,6 +72,53 @@ for case_item in "${CASES[@]}"; do
   actual="$(printf '%s' "${response}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("recommendation_type",""))' 2>/dev/null || true)"
 
   if [[ "${actual}" == "${expected}" ]]; then
+    pass_bool="true"
+  else
+    pass_bool="false"
+  fi
+
+  report_line="$(
+    python3 -c '
+import json,sys
+idx = int(sys.argv[1])
+expected = sys.argv[2]
+text = sys.argv[3]
+resp_raw = sys.argv[4]
+passed = sys.argv[5].lower() == "true"
+try:
+    parsed = json.loads(resp_raw)
+except Exception:
+    parsed = {"_raw_response": resp_raw}
+
+record = {
+    "case_index": idx,
+    "input_text": text,
+    "expected_type": expected,
+    "actual_type": parsed.get("recommendation_type"),
+    "passed": passed,
+    "decoded_parameters": {
+        "recommendation_type": parsed.get("recommendation_type"),
+        "normalized_text": parsed.get("normalized_text"),
+        "value": parsed.get("value"),
+        "value_min": parsed.get("value_min"),
+        "value_max": parsed.get("value_max"),
+        "unit": parsed.get("unit"),
+        "time_start": parsed.get("time_start"),
+        "time_end": parsed.get("time_end"),
+        "condition": parsed.get("condition"),
+        "confidence": parsed.get("confidence"),
+        "parse_method": parsed.get("parse_method"),
+        "errors_or_warnings": parsed.get("errors_or_warnings"),
+        "trace": parsed.get("trace"),
+    },
+    "raw_response": parsed,
+}
+print(json.dumps(record, ensure_ascii=False))
+' "${idx}" "${expected}" "${text}" "${response}" "${pass_bool}"
+  )"
+  printf '%s\n' "${report_line}" >> "${REPORT_JSONL}"
+
+  if [[ "${actual}" == "${expected}" ]]; then
     pass_count=$((pass_count + 1))
     printf "  [%02d] PASS  expected=%s text=%s\n" "${idx}" "${expected}" "${text}"
   else
@@ -77,8 +130,22 @@ done
 
 echo "[3/3] Summary"
 echo "PASS=${pass_count} FAIL=${fail_count} TOTAL=${#CASES[@]}"
+python3 -c '
+import json,sys
+summary = {
+  "pass": int(sys.argv[1]),
+  "fail": int(sys.argv[2]),
+  "total": int(sys.argv[3]),
+  "pass_rate": (int(sys.argv[1]) / int(sys.argv[3])) if int(sys.argv[3]) else 0.0,
+  "jsonl_report": sys.argv[4],
+}
+print(json.dumps(summary, ensure_ascii=False, indent=2))
+with open(sys.argv[5], "w", encoding="utf-8") as f:
+    json.dump(summary, f, ensure_ascii=False, indent=2)
+' "${pass_count}" "${fail_count}" "${#CASES[@]}" "${REPORT_JSONL}" "${REPORT_SUMMARY_JSON}"
+echo "Saved detailed report: ${REPORT_JSONL}"
+echo "Saved summary report: ${REPORT_SUMMARY_JSON}"
 
 if [[ "${fail_count}" -gt 0 ]]; then
   exit 2
 fi
-
