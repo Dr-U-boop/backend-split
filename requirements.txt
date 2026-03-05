@@ -12,3 +12,4 @@ rapidfuzz
 scikit-learn
 joblib
 pytest
+spacy
