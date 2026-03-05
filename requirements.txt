@@ -6,6 +6,9 @@ python-jose[cryptography]
 python-dotenv
 cryptography
 faker
-spacy
 scipy
 numpy
+rapidfuzz
+scikit-learn
+joblib
+pytest
