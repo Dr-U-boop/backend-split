@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from typing import List, Optional
 import sqlite3
+import json
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -160,6 +161,11 @@ def add_current_patient_timeseries_data(
     payload: PatientTimeSeriesDataIngest,
     current_patient: dict = Depends(get_current_patient),
 ):
+    payload = json.loads(payload)
+    raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
     if not payload.data_points:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
