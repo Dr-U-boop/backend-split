@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 BASE_DIR = Path(__file__).resolve().parent
-C_FILE = BASE_DIR / "c" / "sim_core.c"
+C_FILE = BASE_DIR / "c" / "sim_core.cpp"
 LIB_NAME = "libsim_core"
 
 
@@ -25,9 +25,9 @@ def _compile_library() -> Path:
         raise RuntimeError("Windows build is not implemented for simulator C library")
 
     if sys.platform == "darwin":
-        cmd = ["cc", "-O3", "-dynamiclib", str(C_FILE), "-o", str(lib_path), "-lm"]
+        cmd = ["c++", "-O3", "-std=c++17", "-dynamiclib", str(C_FILE), "-o", str(lib_path), "-lm"]
     else:
-        cmd = ["cc", "-O3", "-shared", "-fPIC", str(C_FILE), "-o", str(lib_path), "-lm"]
+        cmd = ["c++", "-O3", "-std=c++17", "-shared", "-fPIC", str(C_FILE), "-o", str(lib_path), "-lm"]
 
     subprocess.check_call(cmd)
     return lib_path

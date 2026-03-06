@@ -6,8 +6,8 @@ import numpy as np
 from fastapi import HTTPException, status
 
 from app.encryption_utils import decrypt_data, encrypt_data
-from app.simulator.c_loader import run_simulation_model_c
 from app.simulator.defaults import DEFAULT_PARAMETERS, DEFAULT_SCENARIO
+from app.simulator.lsoda_solver import run_simulation_model_lsoda
 
 
 MODEL_TO_CODE = {
@@ -234,7 +234,7 @@ def run_simulation(
     dt = 1.0
     steps = (t1 - t0) + 1
 
-    time_arr, glucose_raw = run_simulation_model_c(
+    time_arr, glucose_raw = run_simulation_model_lsoda(
         model_type=MODEL_TO_CODE[model_type],
         patient_vec=patient_vec,
         init_vec=init_vec,
@@ -245,7 +245,7 @@ def run_simulation(
         tms=0.0,
     )
 
-    _, glucose_raw_delay = run_simulation_model_c(
+    _, glucose_raw_delay = run_simulation_model_lsoda(
         model_type=MODEL_TO_CODE[model_type],
         patient_vec=patient_vec,
         init_vec=init_vec,
