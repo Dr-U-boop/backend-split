@@ -1,0 +1,46 @@
+{
+  "generated_at": "2026-03-06T10:49:37.977863",
+  "results": {
+    "sibr": {
+      "tms0": {
+        "rmse_mgdl": 13.918837633223085,
+        "mae_mgdl": 12.012473517188926,
+        "max_abs_mgdl": 27.49151498018415
+      },
+      "tms30": {
+        "rmse_mgdl": 16.516522482332626,
+        "mae_mgdl": 13.957730104054312,
+        "max_abs_mgdl": 43.926710201676826
+      },
+      "plot": "/Users/nillkiggers/Documents/Glukoze-Prod/backend-split/reports/solver_compare_20260306_104937_sibr.svg"
+    },
+    "dm": {
+      "tms0": {
+        "rmse_mgdl": 2.1556480729350866,
+        "mae_mgdl": 1.3009678684080825,
+        "max_abs_mgdl": 6.897780726031101
+      },
+      "tms30": {
+        "rmse_mgdl": 2.171624987127454,
+        "mae_mgdl": 1.333084181019606,
+        "max_abs_mgdl": 6.7678784730989605
+      },
+      "plot": "/Users/nillkiggers/Documents/Glukoze-Prod/backend-split/reports/solver_compare_20260306_104937_dm.svg"
+    }
+  },
+  "speed": {
+    "sibr": {
+      "old_avg_ms": 1.2343486399913672,
+      "new_avg_ms": 2.4834711600124137,
+      "new_vs_old_ratio": 2.0119689685320856
+    },
+    "dm": {
+      "old_avg_ms": 1.1496188000091934,
+      "new_avg_ms": 1.6277726399857784,
+      "new_vs_old_ratio": 1.4159238175060822
+    }
+  },
+  "speed_plot": "/Users/nillkiggers/Documents/Glukoze-Prod/backend-split/reports/solver_compare_20260306_104937_speed.svg",
+  "old_lib": "/tmp/libsim_core_old_compare.dylib",
+  "new_lib": "/tmp/libsim_core_new_compare.dylib"
+}
