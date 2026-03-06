@@ -158,7 +158,7 @@ def get_current_patient_diary_entries(
 
 @router.post("/me/timeseries_data", status_code=status.HTTP_201_CREATED)
 def add_current_patient_timeseries_data(
-    payload: str,
+    payload: PatientTimeSeriesDataIngest,
     current_patient: dict = Depends(get_current_patient),
 ):
     payload = json.loads(payload)
