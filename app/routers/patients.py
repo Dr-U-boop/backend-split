@@ -77,20 +77,6 @@ def get_current_patient_profile(current_patient: dict = Depends(get_current_pati
     return row_to_patient_display(current_patient)
 
 
-@router.get("/me/glucose_data")
-def get_current_patient_glucose_data(
-    current_patient: dict = Depends(get_current_patient),
-    start_datetime: Optional[datetime] = None,
-    end_datetime: Optional[datetime] = None,
-):
-    con = sqlite3.connect(DB_NAME)
-    con.row_factory = sqlite3.Row
-    cur = con.cursor()
-    result = fetch_patient_glucose_data(cur, current_patient["id"], start_datetime, end_datetime)
-    con.close()
-    return result
-
-
 @router.get("/me/comprehensive_data")
 def get_current_patient_comprehensive_data(
     current_patient: dict = Depends(get_current_patient),
@@ -350,4 +336,3 @@ def get_patient_diary_entries(
     result = fetch_patient_diary_entries(cur, patient_id, start_datetime, end_datetime)
     con.close()
     return result
-
