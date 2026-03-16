@@ -15,31 +15,31 @@
 
 ```mermaid
 flowchart TD
-    A[Входной текст рекомендации] --> B[normalize_text]
-    B --> C[Разбиение на clauses]
-    C --> D[_rule_extract: regex/soft-regex по каждому clause]
-    D --> E{Найдены кандидаты?}
+    A["Входной текст рекомендации"] --> B["normalize_text"]
+    B --> C["Разбиение на clauses"]
+    C --> D["rule_extract: regex и soft-regex по каждому clause"]
+    D --> E{"Найдены кандидаты?"}
 
-    E -- Да --> F[Для каждого кандидата: fuzzy match по alias]
-    F --> G[Если fuzzy тип совпал с regex типом -> parse_method=hybrid]
-    G --> H[validate_candidate + warnings]
-    H --> I[Расчёт confidence]
-    I --> J{Какой API вызван?}
-    J -- interpret --> K[Сортировка по confidence и возврат лучшего]
-    J -- interpret-multi --> L[Возврат всех candidates]
+    E -- "Да" --> F["Для каждого кандидата: fuzzy match по alias"]
+    F --> G["Если fuzzy тип совпал с regex типом, parse_method = hybrid"]
+    G --> H["validate_candidate и warnings"]
+    H --> I["Расчёт confidence"]
+    I --> J{"Какой API вызван?"}
+    J -- "interpret" --> K["Сортировка по confidence и возврат лучшего"]
+    J -- "interpret-multi" --> L["Возврат всех candidates"]
 
-    E -- Нет --> M[Fuzzy fallback по всему тексту]
-    M --> N{Есть fuzzy hit?}
-    N -- Да --> O[Создать fallback candidate + parse_method=rule_fuzzy]
-    N -- Нет --> P{ML fallback включён и доступен?}
-    P -- Да --> Q[MLTypeClassifier.predict]
-    P -- Нет --> R[Тип остаётся unknown]
-    Q --> S[Создать fallback candidate + parse_method=ml_classifier]
-    R --> T[Добавить warning: no robust value pattern found]
+    E -- "Нет" --> M["Fuzzy fallback по всему тексту"]
+    M --> N{"Есть fuzzy hit?"}
+    N -- "Да" --> O["Создать fallback candidate, parse_method = rule_fuzzy"]
+    N -- "Нет" --> P{"ML fallback включён и доступен?"}
+    P -- "Да" --> Q["MLTypeClassifier.predict"]
+    P -- "Нет" --> R["Тип остаётся unknown"]
+    Q --> S["Создать fallback candidate, parse_method = ml_classifier"]
+    R --> T["Добавить warning: no robust value pattern found"]
     O --> T
     S --> T
-    T --> U[validate/confidence для fallback]
-    U --> V[Вернуть 1 fallback candidate]
+    T --> U["validate и confidence для fallback"]
+    U --> V["Вернуть 1 fallback candidate"]
 ```
 
 ## Пошаговая логика
