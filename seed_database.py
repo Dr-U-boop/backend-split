@@ -1,5 +1,4 @@
 import sqlite3
-import random
 from faker import Faker
 from datetime import datetime, timedelta
 from app.encryption_utils import encrypt_data
@@ -114,7 +113,49 @@ DEFAULT_SCENARIO = {
 fake = Faker('ru_RU')
 
 
-def simulate_day_data(start_time, glucose_iterator):
+def build_carb_schedule(daily_glucose_profile, interval_minutes=30):
+    points_per_day = len(daily_glucose_profile)
+    glucose_values = [float(value) for value in daily_glucose_profile]
+
+    meal_windows = [
+        ((6, 0), (9, 30)),
+        ((11, 0), (14, 30)),
+        ((17, 0), (20, 30)),
+    ]
+    carb_schedule = {}
+
+    def time_to_index(hours, minutes):
+        return (hours * 60 + minutes) // interval_minutes
+
+    for start_window, end_window in meal_windows:
+        start_idx = max(0, time_to_index(*start_window))
+        end_idx = min(points_per_day - 3, time_to_index(*end_window))
+        best_idx = start_idx
+        best_rise = float('-inf')
+
+        for idx in range(start_idx, end_idx + 1):
+            current_level = glucose_values[idx]
+            future_slice = glucose_values[idx + 1:idx + 4]
+            if not future_slice:
+                continue
+
+            future_peak = max(future_slice)
+            rise_score = future_peak - current_level
+
+            if rise_score > best_rise:
+                best_rise = rise_score
+                best_idx = idx
+
+        rise_strength = max(0.0, best_rise)
+        carbs = int(round(25 + min(rise_strength * 4, 55)))
+        carbs = max(20, min(carbs, 80))
+        meal_minutes = best_idx * interval_minutes
+        carb_schedule[(meal_minutes // 60, meal_minutes % 60)] = carbs
+
+    return carb_schedule
+
+
+def simulate_day_data(start_time, glucose_iterator, carb_schedule):
     records = []
     current_time = start_time
     interval_minutes = 30
@@ -124,8 +165,9 @@ def simulate_day_data(start_time, glucose_iterator):
         current_time += timedelta(minutes=interval_minutes)
         glucose_val = next(glucose_iterator)
 
-        if current_time.hour in [8, 13, 19] and current_time.minute == 0:
-            carbs = random.randint(30, 80)
+        meal_key = (current_time.hour, current_time.minute)
+        if meal_key in carb_schedule:
+            carbs = carb_schedule[meal_key]
             records.append((current_time, 'carbs', carbs, encrypt_data(f"Meal, {carbs} g carbs")))
             insulin_dose = round(carbs / 10, 1)
             records.append((current_time, 'insulin_bolus', insulin_dose, encrypt_data("Rapid insulin for meal")))
@@ -135,7 +177,7 @@ def simulate_day_data(start_time, glucose_iterator):
     return records
 
 
-def seed_patient_related_data(cur, patient_id, glucose_iterator):
+def seed_patient_related_data(cur, patient_id, glucose_iterator, carb_schedule):
     params_json = json.dumps(DEFAULT_PARAMETERS)
     sim_json = json.dumps(DEFAULT_SCENARIO)
 
@@ -161,7 +203,8 @@ def seed_patient_related_data(cur, patient_id, glucose_iterator):
     for day in range(DAYS_OF_DATA):
         daily_records = simulate_day_data(
             datetime.combine((start_date + timedelta(days=day)).date(), datetime.min.time()),
-            glucose_iterator
+            glucose_iterator,
+            carb_schedule
         )
         for record in daily_records:
             all_timeseries_data.append((patient_id, *record))
@@ -201,6 +244,7 @@ def seed_data():
     sampled_indices = np.linspace(0, len(x_data) - 1, points_per_day, dtype=int)
     daily_glucose_profile = x_data[sampled_indices]
     glucose_iterator = itertools.cycle(daily_glucose_profile)
+    carb_schedule = build_carb_schedule(daily_glucose_profile)
 
     for _ in range(NUM_PATIENTS):
         full_name = fake.name()
@@ -214,7 +258,7 @@ def seed_data():
         patient_id = cur.lastrowid
         print(f"  Created patient: {full_name} (ID: {patient_id})")
 
-        inserted_count = seed_patient_related_data(cur, patient_id, glucose_iterator)
+        inserted_count = seed_patient_related_data(cur, patient_id, glucose_iterator, carb_schedule)
         print(f"    -> Inserted {inserted_count} time-series rows.")
 
     # Add generated data for the fixed test patient created in database_setup.py.
@@ -223,7 +267,7 @@ def seed_data():
     if test_patient_row:
         test_patient_id = test_patient_row[0]
         print(f"  Found test_patient (ID: {test_patient_id}), seeding data...")
-        inserted_count = seed_patient_related_data(cur, test_patient_id, glucose_iterator)
+        inserted_count = seed_patient_related_data(cur, test_patient_id, glucose_iterator, carb_schedule)
         print(f"    -> Inserted {inserted_count} time-series rows for test_patient.")
     else:
         print("  test_patient not found, skipping.")
